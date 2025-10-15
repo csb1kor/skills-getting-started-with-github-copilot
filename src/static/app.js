@@ -20,14 +20,84 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        // Create participants list HTML
+        let participantsHTML = "";
+        if (details.participants.length > 0) {
+          participantsHTML = `
+            <div class="participants-section">
+              <strong>Participants:</strong>
+              <ul class="participants-list">
+                ${details.participants
+                  .map(
+                    (p) => `
+                      <li class="participant-row">
+                        <span class="participant-email">${p}</span>
+                        <button class="unregister-btn" data-activity="${encodeURIComponent(
+                          name
+                        )}" data-email="${encodeURIComponent(p)}" title="Unregister">✖</button>
+                      </li>
+                    `
+                  )
+                  .join("")}
+              </ul>
+            </div>
+          `;
+        } else {
+          participantsHTML = `
+            <div class="participants-section">
+              <strong>Participants:</strong>
+              <p class="no-participants">No participants yet.</p>
+            </div>
+          `;
+        }
+
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          ${participantsHTML}
         `;
 
         activitiesList.appendChild(activityCard);
+
+          // Attach click handlers to unregister buttons
+          const unregisterButtons = activityCard.querySelectorAll('.unregister-btn');
+          unregisterButtons.forEach((btn) => {
+            btn.addEventListener('click', async (e) => {
+              const activityName = decodeURIComponent(btn.getAttribute('data-activity'));
+              const email = decodeURIComponent(btn.getAttribute('data-email'));
+
+              try {
+                const resp = await fetch(
+                  `/activities/${encodeURIComponent(activityName)}/participants?email=${encodeURIComponent(email)}`,
+                  { method: 'DELETE' }
+                );
+
+                const result = await resp.json();
+
+                if (resp.ok) {
+                  // Refresh activities to show updated list
+                  fetchActivities();
+                  messageDiv.textContent = result.message;
+                  messageDiv.className = 'success';
+                  messageDiv.classList.remove('hidden');
+                  setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+                } else {
+                  messageDiv.textContent = result.detail || 'Failed to unregister participant';
+                  messageDiv.className = 'error';
+                  messageDiv.classList.remove('hidden');
+                  setTimeout(() => messageDiv.classList.add('hidden'), 5000);
+                }
+              } catch (err) {
+                console.error('Error unregistering participant:', err);
+                messageDiv.textContent = 'Failed to unregister participant. Please try again.';
+                messageDiv.className = 'error';
+                messageDiv.classList.remove('hidden');
+                setTimeout(() => messageDiv.classList.add('hidden'), 5000);
+              }
+            });
+          });
 
         // Add option to select dropdown
         const option = document.createElement("option");
@@ -62,6 +132,10 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        // Refresh activities so the new participant appears without a manual reload
+        // Clear activity select before re-populating to avoid duplicate options
+        activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
+        await fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
